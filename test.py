@@ -44,10 +44,25 @@ def rotatePolygon(points , center, angle):
 
 hh = (rotatePolygon(ii , c , -45))
 
-A = tuple(hh[0] +ncenter-c )
+A = tuple(hh[0]  +ncenter-c)
 B = tuple(hh[1]  +ncenter-c)
 C = tuple(hh[2]  +ncenter-c)
 D = tuple(hh[3]  +ncenter-c)
+
+l = [A,B,C,D]
+print(l)
+xl , yl = [] , []
+for i in l :
+    xl.append(i[0])
+    yl.append(i[1])
+
+xmin = min(xl)
+xmax = max(xl)
+ymin = min(yl)
+ymax = max(yl)    
+
+draw.rectangle((xmin, ymin, xmax, ymax), outline=(255, 255, 255))
+
 
 draw2.polygon(((50,50) , (300,50) , (300,300) , (50,300)),  outline=(255, 0, 0) )
 draw.polygon((A,B,C,D),  outline=(255, 0, 0) )
