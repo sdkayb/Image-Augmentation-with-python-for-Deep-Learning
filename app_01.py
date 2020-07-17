@@ -1,11 +1,12 @@
-from PIL import Image , ImageDraw
+#importing lib
+from PIL import Image , ImageDraw , ImageFont
 import xml.etree.ElementTree as et
 import numpy as np
 import operator
-from math import cos , sin 
+from math import cos , sin , pi
 import random
 
-#reading labeling files and storing data in dicts
+#reading labeling files and storing data in dicts:
 rect_lb_file_path = "C:/Users/sdkay/Documents/INPT/s2/p2/projet pfa/code/images/rects_lb.xml"
 square_lb_file_path = "C:/Users/sdkay/Documents/INPT/s2/p2/projet pfa/code/images/squares_lb.xml"
 img_rect_path = "C:/Users/sdkay/Documents/INPT/s2/p2/projet pfa/code/images/rectss.png"
@@ -17,133 +18,176 @@ square_tree = et.parse(square_lb_file_path)
 rect_root = rect_tree.getroot()
 square_root = square_tree.getroot()
 
-#extracting coordinates as (4x2) matrix , from the labeling files then storing in dicts
+#extracting coordinates as (4x2) matrixs , from the labeling files then storing in dicts:
 d_rect={}
 d_square={}
 for x in rect_root.findall("object"):
     name = x.find("name").text
     y = x.find("bndbox")
+    d = (int(y.find('xmin').text) , int(y.find('ymin').text) , int(y.find('xmax').text) , int(y.find('ymax').text))
     t = np.array([int(y.find('xmin').text) , int(y.find('ymin').text) , int(y.find('xmax').text) , int(y.find('ymax').text)])
     t = np.reshape(t , (2,2))
     t = np.insert( t , 1 , [t[1,0],t[0,1]] , axis=0)
     t = np.insert( t , 3 , [t[0,0],t[2,1]] , axis=0)
-    d_rect[name] = t
+    d_rect[name] = [t , d]
 
 for x in square_root.findall("object"):
     name = x.find("name").text
     y = x.find("bndbox")
+    d = (int(y.find('xmin').text) , int(y.find('ymin').text) , int(y.find('xmax').text) , int(y.find('ymax').text))
     t = np.array([int(y.find('xmin').text) , int(y.find('ymin').text) , int(y.find('xmax').text) , int(y.find('ymax').text)])
     t = np.reshape(t , (2,2))
     t = np.insert( t , 1 , [t[1,0] , t[0,1]] , axis=0)
     t = np.insert( t , 3 , [t[0,0] , t[2,1]] , axis=0)
-    d_square[name] = t
+    d_square[name] = [t , d]
 
+#opening base images:
 img_rect = Image.open(img_rect_path)
 img_squares = Image.open(img_squares_path)
 img_backgrd = Image.open(img_backgrd_path)
 
-class Block:
-    def __init__(self , name , image , lb_file , coord):
-        self.name = name
-        self.image = image
+#print(d_square)
+
+class Block :
+    def __init__(self , name , image , lb_file , coord , diag ):
+        self.name = name 
+        self.image = image 
         self.lb_file = lb_file
         self.coord = coord
         self.size = np.array(self.coord[2]-self.coord[0])
-        self.old_center = np.array( self.coord[2] - (self.size/2) )
-        self.new_coord = None
-        
-    #methods to manipulate blocks 
-    def getCenter (self):
-        l=self.coord
+        self.diag = diag
+        self.new_image = None
+        self.new_lb_file = None
+    
+    def getCenter(self):
         c = np.array( self.coord[2] - (self.size/2) )
-        print(self.size)
         return c
 
     def Crop(self ):
-        crp = Image.open(self.image).crop(tuple(np.reshape( self.coord , (1,4) ))[0])
+        crp = Image.open(self.image).crop(self.diag)
         return crp 
 
     def Rotate(self , angle):
         rot = self.Crop().rotate(angle, expand = True , fillcolor = "black")
         return rot
 
-    def Place(self , pos , angle):
+    def Place(self ,angle, pos):
         copy = Image.open(img_backgrd_path).copy()
         copy.paste(self.Rotate(angle) , pos)
-        self.drawMask()
+        
         return copy
 
-    #methods to deal with coordiantes and bboxes
-    def getNewCenter(self , pos) :
-        l = self.coord
+    def getNewCoord (self , angle , pos) : 
+        rm = np.array([[cos(angle*pi/180) , sin(angle*pi/180)] , [-sin(angle*pi/180) , cos(angle*pi/180)]])
         c = self.getCenter()
-        nc = c + (np.array(list(pos)) - l[0])
+        #print("rotation matrix = " , rm , "center = " , c)
+        nc=[]
+        for i in self.coord : 
+            nc.append((rm.dot(i-c)) + c)
+        #print(nc)
+
+        #bounding_box
+        xl , yl = [] , []
+        for i in nc :
+            xl.append(i[0])
+            yl.append(i[1])
+        xmin = min(xl)
+        xmax = max(xl)
+        ymin = min(yl)
+        ymax = max(yl)
+
+        nc = np.array(nc) + (np.array(pos)-np.array([xmin , ymin]))
         return nc
 
-    def getNewCoord(self , angle , pos):
-        l = self.coord
-        c = self.getCenter()
-        rm = np.array([[cos(angle) , sin(angle)] , [-sin(angle) , cos(angle)]])
-        tv = (np.array(list(pos)) - l[0])
-        nc = self.getNewCenter(pos) 
-        fnc = [ ( (l[0] + tv) - nc ).dot(rm) , ( (l[1] + tv) - nc ).dot(rm) ]
-        return fnc
+    def getNewCenter(self , angle , pos):
+        size = np.array(self.Rotate(angle).size)
+        newcoord = self.getNewCoord(angle , pos)
+        xl , yl = [] , []
+        for i in newcoord :
+            xl.append(i[0])
+            yl.append(i[1])
+        xmin = min(xl)
+        xmax = max(xl)
+        ymin = min(yl)
+        ymax = max(yl)
+        bbox = np.array([xmax , ymax])
+        nc = bbox - (size/2)
+    
+        return nc
 
-    def drawBBox(self):
-        arg = self.new_coord
-        im = Image.open(img_backgrd)
-        draw = ImageDraw.Draw(im)
-        draw.rectangle( arg , outline=(0, 255, 0))
+    def drawMask(self , angle , pos) :
+        pic = self.Place(angle , pos)
+        draw = ImageDraw.Draw(pic)
+        l = self.getNewCoord(angle , pos)
+        AA = tuple(l[0])
+        B  = tuple(l[1])
+        C  = tuple(l[2])
+        D  = tuple(l[3])
+        draw.line((AA,B,C,D,AA), width=10 , fill="red" )
+        return pic
 
-    def drawMask(self) : 
-        arg = self.new_coord
-        im = Image.open(img_backgrd)
-        draw = ImageDraw.Draw(im)
-        draw.rectangle( arg , outline=(0, 255, 0))
+    def drawBBox(self , angle , pos ):
+        pic = self.Place(angle , pos)
+        draw = ImageDraw.Draw(pic)
+        nc = self.getNewCoord(angle , pos)
+        xl , yl = [] , []
+        for i in nc :
+            xl.append(i[0])
+            yl.append(i[1])
+        xmin = min(xl)
+        xmax = max(xl)
+        ymin = min(yl)
+        ymax = max(yl)
+        draw.rectangle((xmin, ymin, xmax, ymax), width = 10 ,outline=(255, 0, 0))
+        fnt = ImageFont.truetype( font = "C:/Users/sdkay/Documents/INPT/s2/p2/projet pfa/code/IntroDemo-BlackCAPS.ttf" , size = 50)
+        draw.text((xmin,ymax-60) , font = fnt , text = self.name )
+        return pic
 
-
+    def drawNewCenter(self , angle ,pos):
+        pic = self.Place(angle , pos)
+        draw = ImageDraw.Draw(pic)
+        nc = self.getNewCenter(angle , pos)
+        nc = np.insert(nc , 2 , nc+20 , axis = 0)
+        print(nc)
+        #p = list(map(tuple, nc))
+        draw.ellipse(list(nc) , fill ="#ffff33", outline ="red" )
+        return pic
+    
+    def labeling(self , angle ,pos , compteur):
+        nc = self.getNewCoord(angle , pos)
+        xl , yl = [] , []
+        for i in nc :
+            xl.append(i[0])
+            yl.append(i[1])
+        xmin = min(xl)
+        xmax = max(xl)
+        ymin = min(yl)
+        ymax = max(yl)
+    
+        self.new_image = 'img_'+ str(compteur)
+        self.new_lb_file = "C:/Users/sdkay/Documents/INPT/s2/p2/projet pfa/code/gen_lb.csv"
+        with open("gen_lb.csv" , mode = 'a') as f:
+            f.write('\n{},{},{},{},{},{},{}'.format(self.new_image , self.name , xmin , ymin , xmax , ymax , self.getNewCoord(angle , pos)))
+        
 #creartin list of the basic shapes or blocks
-base_blocks = []
+base_rect_blocks = []
 for e in d_rect:
-    base_blocks.append( Block(name = e , coord = d_rect[e] , image =img_rect_path , lb_file =rect_lb_file_path  ))       
+    base_rect_blocks.append( Block(name = e , coord = d_rect[e][0] , image =img_rect_path , lb_file =rect_lb_file_path , diag=d_rect[e][1]  ))     
+base_square_blocks = []  
 for e in d_square:
-    base_blocks.append( Block(name = e , coord = d_square[e] , image = img_squares_path , lb_file =square_lb_file_path  )) 
+    base_square_blocks.append( Block(name = e , coord = d_square[e][0] , image = img_squares_path , lb_file =square_lb_file_path , diag=d_square[e][1] )) 
 
-new_blocks = []
-#------- generating new images
+base_blocks = base_rect_blocks + base_square_blocks
+compt = 0
+for i in base_blocks:
+    compt +=1 
+    angle_rot = random.randint(0,180)
+    xlim = img_backgrd.size[0]-i.Rotate(angle_rot).size[0]
+    ylim = img_backgrd.size[1]-i.Rotate(angle_rot).size[1]
+    position = (random.randint(0,xlim),random.randint(0,ylim))
+    print(compt)
+    #i.Place(angle_rot , position).show()
+    #i.drawBBox(angle_rot , position).show()
+    i.labeling(angle_rot , position , compt)
+    #i.Place(angle_rot , position).save()
 
-
-
-print(base_blocks[0].getCenter() ,'\n\n', base_blocks[0].coord)
-'''
-base_blocks[0].Crop().show()
-base_blocks[1].Rotate(50).show()
-base_blocks[2].Place((0,0)).show()
-print(base_blocks[2].size , base_blocks[2].getNewCenter([0,0]))
-base_blocks[0].Place((0,0) , 20).show()
-'''
-
-#image processing 
-'''
-for elm in d_rect:
-    coord = d_rect[elm]
-    angle = random.randint(0,180)
-    crp = img_rect.crop(coord).rotate(angle , expand = True , fillcolor = "black")
-    copy = img_backgrd.copy()
-    xlim = img_backgrd.size[0] - crp.size[0]
-    ylim = img_backgrd.size[1] - crp.size[1]
-    place = (random.randint(0,xlim),random.randint(0,ylim))
-    copy.paste(crp , place)
-    copy.show()
-
-for elm in d_square:
-    coord = d_square[elm]
-    angle = random.randint(0,180)
-    crp = img_squares.crop(coord).rotate(angle , expand = True , fillcolor = "black" )
-    copy = img_backgrd.copy()
-    xlim = img_backgrd.size[0]-crp.size[0]
-    ylim = img_backgrd.size[1]-crp.size[1]
-    place = (random.randint(0,xlim),random.randint(0,ylim))
-    copy.paste(crp , place)
-    copy.show()
-    '''

@@ -16,25 +16,26 @@ blue.paste( rot , pos , rot )
 blue2.paste(tom , (50,50) , tom )
 
 
-i = (0,0,250,250)
+i = (0 , 0 , 250 , 250)
 ii = np.array(i).reshape((2,2))
 ii = np.insert(ii , 1 , ii.diagonal(), axis = 0) 
 ii = np.insert(ii , 3 , ii.diagonal()[::-1] , axis = 0)
-print(ii , '\n')
+print("ii=" , ii , '\n')
 
 c = (ii[2]+ii[0]) / 2
+print("center = " , c)
 ncenter = np.array([rot.size[0]/2 , rot.size[1]/2])
-print(ncenter, '\n')
+print("new center = " , ncenter, '\n')
 
 draw = ImageDraw.Draw(blue)
 draw2 = ImageDraw.Draw(blue2)
 rm = np.array([[cos(angle) , sin(angle)] , [-sin(angle) , cos(angle)]])
-print(rm, '\n')
+print("rotation matrix = " , rm, '\n')
 nc=[]
 for i in ii : 
     nc.append(rm.dot(i-c)+c)
 
-print(nc, '\n')
+print("rot * coord = " , nc, '\n')
 
 
 
@@ -50,7 +51,7 @@ C = tuple(hh[2]  +ncenter-c)
 D = tuple(hh[3]  +ncenter-c)
 
 l = [A,B,C,D]
-print(l)
+print("new coords = " , l)
 xl , yl = [] , []
 for i in l :
     xl.append(i[0])
