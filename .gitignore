@@ -1,3 +1,4 @@
 dataaug_env/
 .vscode/
 images/
+*.png
